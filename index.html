@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sistema Agua Bidones</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Empresa de agua</p>
+      <h1>Sistema de bidones</h1>
+    </div>
+    <div class="top-actions">
+      <button id="printBtn" class="ghost">Imprimir reporte</button>
+      <button id="exportBtn" class="ghost">Exportar respaldo</button>
+      <label class="ghost file-btn">
+        Importar respaldo
+        <input id="importFile" type="file" accept="application/json">
+      </label>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Secciones">
+    <button class="tab active" data-view="dashboard">Dashboard</button>
+    <button class="tab" data-view="registro">Registro diario</button>
+    <button class="tab" data-view="inventario">Inventario</button>
+    <button class="tab" data-view="gastos">Gastos</button>
+    <button class="tab" data-view="reportes">Reportes</button>
+    <button class="tab" data-view="config">Config</button>
+  </nav>
+
+  <main>
+    <section id="dashboard" class="view active">
+      <div class="section-title">
+        <h2>Resumen general</h2>
+        <p>Valores calculados con los registros guardados.</p>
+      </div>
+      <div class="panel report-controls">
+        <label>Desde <input id="dashFrom" type="date"></label>
+        <label>Hasta <input id="dashTo" type="date"></label>
+        <div class="filter-actions">
+          <button type="button" id="clearDashFilter" class="ghost">Ver todo</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="kpis"></div>
+      <div class="grid two">
+        <section class="panel">
+          <h3>Stock actual</h3>
+          <div id="stockList" class="stock-list"></div>
+        </section>
+        <section class="panel">
+          <h3>Ventas por chofer</h3>
+          <div id="driverSummary" class="mini-table"></div>
+        </section>
+      </div>
+      <section class="panel">
+        <h3>Deudas por bidones rotos o perdidos</h3>
+        <div id="driverDebtSummary" class="stock-list"></div>
+      </section>
+      <section class="panel">
+        <h3>Entregado de administración a producción</h3>
+        <div id="productionSupplySummary" class="stock-list"></div>
+      </section>
+      <section class="panel">
+        <h3>Costo por galón / bidón</h3>
+        <div id="costPerBottleSummary" class="stock-list"></div>
+      </section>
+    </section>
+
+    <section id="registro" class="view">
+      <div class="section-title">
+        <h2>Registro diario</h2>
+        <p>Cargá una fila al final del día. Los domingos quedan marcados como no trabajados.</p>
+      </div>
+      <form id="dailyForm" class="panel form-grid">
+        <input type="hidden" id="dailyId">
+        <label>Fecha <input id="date" type="date" required></label>
+        <label>Bidones llenados <input id="produced" type="number" min="0" value="0"></label>
+        <label>Tapas entregadas a producción <input id="capsDelivered" type="number" min="0" value="0"></label>
+        <label>Etiquetas entregadas a producción <input id="labelsDelivered" type="number" min="0" value="0"></label>
+        <label>Sellos entregados a producción <input id="sealsDelivered" type="number" min="0" value="0"></label>
+        <label>Tapas usadas <input id="capsUsed" type="number" min="0" value="0"></label>
+        <label>Etiquetas usadas <input id="labelsUsed" type="number" min="0" value="0"></label>
+        <label>Sellos usados <input id="sealsUsed" type="number" min="0" value="0"></label>
+        <label>Venta directa 7 Bs <input id="direct7" type="number" min="0" value="0"></label>
+        <label>Venta directa 8 Bs <input id="direct8" type="number" min="0" value="0"></label>
+        <label>Bidones físicos vendidos <input id="physicalBottlesSold" type="number" min="0" value="0"></label>
+        <label>Precio unitario bidón físico <input id="physicalBottleUnitPrice" type="number" min="0" step="0.01" value="0"></label>
+        <label>Efectivo recibido <input id="cash" type="number" min="0" step="0.01" value="0"></label>
+        <label>QR recibido <input id="qr" type="number" min="0" step="0.01" value="0"></label>
+        <label>Bidones rotos <input id="broken" type="number" min="0" value="0"></label>
+        <label>Chofer responsable roto <select id="brokenDriver"></select></label>
+        <label>Bidones perdidos <input id="lost" type="number" min="0" value="0"></label>
+        <label>Chofer responsable perdido <select id="lostDriver"></select></label>
+        <label>Litros gasolina total <input id="gasLiters" type="number" min="0" step="0.01" value="0"></label>
+        <label>Costo gasolina manual <input id="gasCost" type="number" min="0" step="0.01" value="0"></label>
+        <label>Litros diésel total <input id="dieselLiters" type="number" min="0" step="0.01" value="0"></label>
+        <label>Costo diésel manual <input id="dieselCost" type="number" min="0" step="0.01" value="0"></label>
+        <label class="wide">Observaciones <input id="notes" type="text"></label>
+        <div class="driver-inputs wide" id="driverInputs"></div>
+        <div class="form-actions wide">
+          <button type="submit">Guardar día</button>
+          <button type="button" class="ghost" id="clearDaily">Limpiar</button>
+        </div>
+      </form>
+      <div class="panel">
+        <h3>Últimos registros</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th><th>Día</th><th>Producidos</th><th>Vendidos agua</th><th>Bidones físicos</th><th>Entregado producción</th><th>Ingresos</th><th>Sobrante</th><th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="dailyRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="grid two">
+        <form id="debtPaymentForm" class="panel form-grid compact">
+          <h3 class="wide">Registrar pago de deuda</h3>
+          <label>Fecha <input id="debtPaymentDate" type="date" required></label>
+          <label>Chofer <select id="debtPaymentDriver"></select></label>
+          <label>Monto pagado <input id="debtPaymentAmount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Detalle <input id="debtPaymentNote" type="text" placeholder="Ej: pagó 1 bidón roto"></label>
+          <button class="wide" type="submit">Guardar pago</button>
+        </form>
+        <section class="panel">
+          <h3>Estado de deuda</h3>
+          <div id="driverDebtDetail" class="stock-list"></div>
+        </section>
+      </div>
+      <div class="panel">
+        <h3>Pagos de deuda</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Chofer</th><th>Monto</th><th>Detalle</th><th>Acción</th></tr></thead>
+            <tbody id="debtPaymentRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="inventario" class="view">
+      <div class="section-title">
+        <h2>Inventario y compras</h2>
+        <p>Las compras suman stock automáticamente. La producción descuenta tapas, etiquetas y sellos.</p>
+      </div>
+      <div class="grid two">
+        <form id="purchaseForm" class="panel form-grid compact">
+          <h3 class="wide">Registrar compra</h3>
+          <label>Fecha <input id="purchaseDate" type="date" required></label>
+          <label>Producto
+            <select id="purchaseItem">
+              <option value="caps">Tapas</option>
+              <option value="labels">Etiquetas</option>
+              <option value="seals">Sellos</option>
+              <option value="bottles">Bidones nuevos</option>
+              <option value="gasoline">Gasolina</option>
+              <option value="diesel">Diésel</option>
+            </select>
+          </label>
+          <label>Cantidad / litros <input id="purchaseQty" type="number" min="0" step="0.01" value="1"></label>
+          <label>Costo total <input id="purchaseCost" type="number" min="0" step="0.01" value="0"></label>
+          <button class="wide" type="submit">Guardar compra</button>
+        </form>
+        <section class="panel">
+          <h3>Estado de inventario</h3>
+          <div id="inventoryDetail" class="stock-list"></div>
+        </section>
+      </div>
+      <div class="panel">
+        <h3>Historial de compras</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Producto</th><th>Cantidad</th><th>Costo</th><th>Acción</th></tr></thead>
+            <tbody id="purchaseRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="gastos" class="view">
+      <div class="section-title">
+        <h2>Gastos</h2>
+        <p>Gastos diarios y mensuales separados para controlar mejor la ganancia neta.</p>
+      </div>
+      <div class="grid two">
+        <form id="dailyExpenseForm" class="panel form-grid compact">
+          <h3 class="wide">Gastos diarios</h3>
+          <label>Fecha <input id="dailyExpenseDate" type="date" required></label>
+          <label>Categoría
+            <select id="dailyExpenseCategory">
+              <option>Gasolina</option><option>Diésel</option><option>Mantenimiento</option><option>Insumos</option><option>Otros</option>
+            </select>
+          </label>
+          <label>Monto <input id="dailyExpenseAmount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Detalle <input id="dailyExpenseNote" type="text" placeholder="Opcional"></label>
+          <button class="wide" type="submit">Guardar gasto diario</button>
+        </form>
+        <form id="monthlyExpenseForm" class="panel form-grid compact">
+          <h3 class="wide">Gastos mensuales</h3>
+          <label>Fecha <input id="monthlyExpenseDate" type="date" required></label>
+          <label>Categoría
+            <select id="monthlyExpenseCategory">
+              <option>Luz</option><option>Sueldos</option><option>Cuota motocarro</option><option>Crédito bancario</option><option>Mantenimiento</option><option>Otros</option>
+            </select>
+          </label>
+          <label>Monto <input id="monthlyExpenseAmount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Detalle <input id="monthlyExpenseNote" type="text" placeholder="Opcional"></label>
+          <button class="wide" type="submit">Guardar gasto mensual</button>
+        </form>
+      </div>
+      <div class="grid two">
+        <form id="debtForm" class="panel form-grid compact">
+          <h3 class="wide">Agregar compra con deuda</h3>
+          <label>Fecha <input id="debtDate" type="date" required></label>
+          <label>Nombre de la deuda <input id="debtName" type="text" placeholder="Ej: Moto, motocarro, máquina" required></label>
+          <label>Monto prestado <input id="debtAmount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Detalle <input id="debtNote" type="text" placeholder="Opcional"></label>
+          <button class="wide" type="submit">Guardar deuda</button>
+        </form>
+        <form id="debtInstallmentForm" class="panel form-grid compact">
+          <h3 class="wide">Registrar pago de deuda</h3>
+          <label>Fecha <input id="debtInstallmentDate" type="date" required></label>
+          <label>Deuda <select id="debtInstallmentDebt"></select></label>
+          <label>Monto pagado <input id="debtInstallmentAmount" type="number" min="0" step="0.01" value="0"></label>
+          <label>Detalle <input id="debtInstallmentNote" type="text" placeholder="Opcional"></label>
+          <button class="wide" type="submit">Guardar pago</button>
+        </form>
+      </div>
+      <div class="grid two">
+        <div class="panel">
+          <h3>Deudas activas</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fecha</th><th>Deuda</th><th>Prestado</th><th>Pagado</th><th>Saldo</th><th>Acción</th></tr></thead>
+              <tbody id="liabilityDebtRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Pagos de deudas</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fecha</th><th>Deuda</th><th>Monto</th><th>Detalle</th><th>Acción</th></tr></thead>
+              <tbody id="liabilityPaymentRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Resumen diario de gastos</h3>
+        <div class="report-controls">
+          <label>Fecha a revisar <input id="dailySpendDate" type="date"></label>
+          <div class="filter-actions">
+            <button type="button" id="todaySpendBtn" class="ghost">Ver hoy</button>
+          </div>
+        </div>
+        <div class="kpi-grid small" id="dailySpendKpis"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Tipo</th><th>Categoría / producto</th><th>Detalle</th><th>Monto</th></tr></thead>
+            <tbody id="dailySpendRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="panel">
+          <h3>Gastos diarios guardados</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Detalle</th><th>Acción</th></tr></thead>
+              <tbody id="dailyExpenseRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Gastos mensuales guardados</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th><th>Detalle</th><th>Acción</th></tr></thead>
+              <tbody id="monthlyExpenseRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Filtrar gastos</h3>
+        <div class="report-controls">
+          <label>Tipo
+            <select id="expenseFilterType">
+              <option value="">Todos</option>
+              <option>Diario</option>
+              <option>Mensual</option>
+              <option>Pago deuda</option>
+            </select>
+          </label>
+          <label>Categoría
+            <select id="expenseFilterCategory"></select>
+          </label>
+          <label>Desde <input id="expenseFilterFrom" type="date"></label>
+          <label>Hasta <input id="expenseFilterTo" type="date"></label>
+        </div>
+        <div class="kpi-grid small" id="expenseFilterKpis"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Detalle</th><th>Monto</th></tr></thead>
+            <tbody id="expenseFilterRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="reportes" class="view">
+      <div class="section-title">
+        <h2>Reportes</h2>
+        <p>Filtrá por fecha y repartidor para revisar ventas, producción y ganancia.</p>
+      </div>
+      <div class="panel report-controls">
+        <label>Desde <input id="filterFrom" type="date"></label>
+        <label>Hasta <input id="filterTo" type="date"></label>
+        <label>Repartidor <select id="filterDriver"></select></label>
+      </div>
+      <div class="kpi-grid small" id="reportKpis"></div>
+      <div class="panel">
+        <h3>Detalle filtrado</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Repartidor</th><th>Cantidad</th><th>Ingresos</th><th>Total día</th><th>Ganancia estimada</th></tr></thead>
+            <tbody id="reportRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="config" class="view">
+      <div class="section-title">
+        <h2>Configuración</h2>
+        <p>Estos valores se usan en cálculos automáticos. Podés cambiarlos cuando haga falta.</p>
+      </div>
+      <form id="configForm" class="panel form-grid">
+        <label>Bidones físicos iniciales <input id="initialBottles" type="number" min="0"></label>
+        <label>Tapas iniciales <input id="initialCaps" type="number" min="0"></label>
+        <label>Etiquetas iniciales <input id="initialLabels" type="number" min="0"></label>
+        <label>Sellos iniciales <input id="initialSeals" type="number" min="0"></label>
+        <label>Precio repartidor <input id="priceDriver" type="number" min="0" step="0.01"></label>
+        <label>Venta directa 7 <input id="priceDirect7" type="number" min="0" step="0.01"></label>
+        <label>Venta directa 8 <input id="priceDirect8" type="number" min="0" step="0.01"></label>
+        <label>Costo tapa <input id="costCap" type="number" min="0" step="0.01"></label>
+        <label>Costo etiqueta <input id="costLabel" type="number" min="0" step="0.01"></label>
+        <label>Costo sello <input id="costSeal" type="number" min="0" step="0.01"></label>
+        <label>Costo gasolina por litro <input id="gasolineLiterCost" type="number" min="0" step="0.01"></label>
+        <label>Costo diésel por litro <input id="dieselLiterCost" type="number" min="0" step="0.01"></label>
+        <label>Comisión empleado producción 1 <input id="productionEmployee1Commission" type="number" min="0" step="0.01"></label>
+        <label>Comisión empleado producción 2 <input id="productionEmployee2Commission" type="number" min="0" step="0.01"></label>
+        <label>Depreciación mensual automática <input id="monthlyDepreciation" type="number" min="0" step="0.01"></label>
+        <label>Cobro roto/perdido <input id="lostCharge" type="number" min="0" step="0.01"></label>
+        <label>Alerta stock bajo <input id="lowStock" type="number" min="0"></label>
+        <label class="wide">Choferes <input id="drivers" type="text" placeholder="Etenier, Sebastian, Freddy"></label>
+        <div class="form-actions wide">
+          <button type="submit">Guardar configuración</button>
+          <button type="button" class="danger" id="resetBtn">Borrar todos los datos</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <template id="kpiTemplate">
+    <article class="kpi">
+      <span></span>
+      <strong></strong>
+      <small></small>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
