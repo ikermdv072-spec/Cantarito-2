@@ -258,6 +258,50 @@ td button {
 .ok { color: var(--good); font-weight: 700; }
 .warn { color: var(--warn); font-weight: 700; }
 
+.muted {
+  color: var(--muted);
+}
+
+.notice {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--muted);
+  padding: 10px 12px;
+  margin-top: 12px;
+}
+
+.notice.good {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: var(--good);
+}
+
+.notice.bad {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: var(--bad);
+}
+
+.sql-box {
+  margin-top: 12px;
+}
+
+.sql-box summary {
+  cursor: pointer;
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.sql-box pre {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+}
+
 .report-controls {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

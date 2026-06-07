@@ -1,4 +1,5 @@
 const STORAGE_KEY = "sistema-agua-bidones-v1";
+const SUPABASE_CONFIG_KEY = "sistema-agua-bidones-supabase";
 
 const defaults = {
   config: {
@@ -31,6 +32,10 @@ const defaults = {
 };
 
 let state = loadState();
+let supabaseConfig = loadSupabaseConfig();
+let supabaseClient = null;
+let cloudSaveTimer = null;
+let applyingCloudState = false;
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -81,8 +86,131 @@ function normalizeState(data) {
   return data;
 }
 
-function saveState() {
+function saveState(options = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!options.skipCloud) queueCloudSave();
+}
+
+function loadSupabaseConfig() {
+  const saved = localStorage.getItem(SUPABASE_CONFIG_KEY);
+  if (!saved) {
+    return {
+      url: "",
+      anonKey: "",
+      table: "water_app_state",
+      rowId: "cantaritooo"
+    };
+  }
+  try {
+    return {
+      table: "water_app_state",
+      rowId: "cantaritooo",
+      ...JSON.parse(saved)
+    };
+  } catch {
+    return {
+      url: "",
+      anonKey: "",
+      table: "water_app_state",
+      rowId: "cantaritooo"
+    };
+  }
+}
+
+function saveSupabaseConfig() {
+  localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(supabaseConfig));
+}
+
+function hasSupabaseConfig() {
+  return Boolean(supabaseConfig.url && supabaseConfig.anonKey && supabaseConfig.table && supabaseConfig.rowId);
+}
+
+function getSupabaseClient() {
+  if (!hasSupabaseConfig() || !window.supabase) return null;
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+  }
+  return supabaseClient;
+}
+
+function setSupabaseStatus(text, type = "") {
+  const box = document.getElementById("supabaseStatus");
+  if (!box) return;
+  box.textContent = text;
+  box.className = `notice ${type}`.trim();
+}
+
+function loadSupabaseForm() {
+  const fields = {
+    supabaseUrl: "url",
+    supabaseAnonKey: "anonKey",
+    supabaseTable: "table",
+    supabaseRowId: "rowId"
+  };
+  Object.entries(fields).forEach(([id, key]) => {
+    const input = document.getElementById(id);
+    if (input) input.value = supabaseConfig[key] || "";
+  });
+  if (hasSupabaseConfig()) {
+    setSupabaseStatus("Supabase configurado. Los cambios se guardan también en la nube.", "good");
+  } else {
+    setSupabaseStatus("Supabase no configurado. El sistema seguirá guardando en este navegador.");
+  }
+}
+
+function queueCloudSave() {
+  if (applyingCloudState || !hasSupabaseConfig()) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(() => saveToSupabase(), 800);
+}
+
+async function saveToSupabase() {
+  const client = getSupabaseClient();
+  if (!client) return;
+  const payload = {
+    id: supabaseConfig.rowId,
+    data: state,
+    updated_at: new Date().toISOString()
+  };
+  setSupabaseStatus("Guardando en Supabase...");
+  const { error } = await client
+    .from(supabaseConfig.table)
+    .upsert(payload, { onConflict: "id" });
+  if (error) {
+    setSupabaseStatus(`No se pudo guardar en Supabase: ${error.message}`, "bad");
+    return;
+  }
+  setSupabaseStatus(`Guardado en Supabase: ${new Date().toLocaleTimeString("es-BO")}`, "good");
+}
+
+async function loadFromSupabase() {
+  const client = getSupabaseClient();
+  if (!client) return;
+  setSupabaseStatus("Cargando datos desde Supabase...");
+  const { data, error } = await client
+    .from(supabaseConfig.table)
+    .select("data, updated_at")
+    .eq("id", supabaseConfig.rowId)
+    .maybeSingle();
+  if (error) {
+    setSupabaseStatus(`No se pudo cargar Supabase: ${error.message}`, "bad");
+    return;
+  }
+  if (!data?.data) {
+    await saveToSupabase();
+    return;
+  }
+  applyingCloudState = true;
+  state = normalizeState({
+    ...structuredClone(defaults),
+    ...data.data,
+    config: { ...defaults.config, ...(data.data.config || {}) }
+  });
+  saveState({ skipCloud: true });
+  applyingCloudState = false;
+  renderAll();
+  const stamp = data.updated_at ? new Date(data.updated_at).toLocaleString("es-BO") : "sin fecha";
+  setSupabaseStatus(`Datos cargados desde Supabase. Última actualización: ${stamp}`, "good");
 }
 
 function money(value) {
@@ -754,6 +882,7 @@ function renderAll() {
   renderDebtPayments();
   renderReports();
   loadConfigForm();
+  loadSupabaseForm();
   setDefaultDates();
 }
 
@@ -957,6 +1086,38 @@ document.getElementById("configForm").addEventListener("submit", (event) => {
   alert("Configuración guardada.");
 });
 
+document.getElementById("supabaseForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  supabaseConfig = {
+    url: document.getElementById("supabaseUrl").value.trim(),
+    anonKey: document.getElementById("supabaseAnonKey").value.trim(),
+    table: document.getElementById("supabaseTable").value.trim() || "water_app_state",
+    rowId: document.getElementById("supabaseRowId").value.trim() || "cantaritooo"
+  };
+  supabaseClient = null;
+  saveSupabaseConfig();
+  loadSupabaseForm();
+  await loadFromSupabase();
+  alert("Conexión de Supabase guardada.");
+});
+
+document.getElementById("syncNowBtn").addEventListener("click", async () => {
+  if (!hasSupabaseConfig()) {
+    alert("Primero guardá la URL y la anon public key de Supabase.");
+    return;
+  }
+  await loadFromSupabase();
+  await saveToSupabase();
+});
+
+document.getElementById("clearSupabaseBtn").addEventListener("click", () => {
+  if (!confirm("¿Quitar la conexión con Supabase de este navegador? Los datos locales no se borran.")) return;
+  localStorage.removeItem(SUPABASE_CONFIG_KEY);
+  supabaseConfig = loadSupabaseConfig();
+  supabaseClient = null;
+  loadSupabaseForm();
+});
+
 document.addEventListener("click", (event) => {
   const target = event.target;
   if (target.dataset.deleteDay && confirm("¿Borrar este registro diario?")) {
@@ -1079,3 +1240,4 @@ document.getElementById("resetBtn").addEventListener("click", () => {
 });
 
 renderAll();
+if (hasSupabaseConfig()) loadFromSupabase();

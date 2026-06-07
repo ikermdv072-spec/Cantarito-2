@@ -365,6 +365,48 @@
           <button type="button" class="danger" id="resetBtn">Borrar todos los datos</button>
         </div>
       </form>
+      <div class="panel">
+        <h3>Supabase</h3>
+        <p class="muted">Conectá la base de datos para que el sistema guarde la información en la nube.</p>
+        <form id="supabaseForm" class="form-grid">
+          <label>URL del proyecto <input id="supabaseUrl" type="url" placeholder="https://xxxxx.supabase.co"></label>
+          <label>Anon public key <input id="supabaseAnonKey" type="password" placeholder="eyJ..."></label>
+          <label>Tabla <input id="supabaseTable" type="text" value="water_app_state"></label>
+          <label>ID del negocio <input id="supabaseRowId" type="text" value="cantaritooo"></label>
+          <div class="form-actions wide">
+            <button type="submit">Guardar conexión</button>
+            <button type="button" id="syncNowBtn">Sincronizar ahora</button>
+            <button type="button" class="ghost" id="clearSupabaseBtn">Quitar conexión</button>
+          </div>
+        </form>
+        <div id="supabaseStatus" class="notice">Supabase no configurado. El sistema seguirá guardando en este navegador.</div>
+        <details class="sql-box">
+          <summary>SQL para crear la tabla en Supabase</summary>
+          <pre><code>create table if not exists public.water_app_state (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.water_app_state enable row level security;
+
+create policy "leer estado del sistema"
+on public.water_app_state for select
+to anon
+using (true);
+
+create policy "crear estado del sistema"
+on public.water_app_state for insert
+to anon
+with check (true);
+
+create policy "actualizar estado del sistema"
+on public.water_app_state for update
+to anon
+using (true)
+with check (true);</code></pre>
+        </details>
+      </div>
     </section>
   </main>
 
@@ -376,6 +418,130 @@
     </article>
   </template>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
+  <script>
+    (() => {
+      const cfgKey = "sistema-agua-bidones-supabase";
+      const dataKey = "sistema-agua-bidones-v1";
+      const defaults = { url: "", anonKey: "", table: "water_app_state", rowId: "cantaritooo" };
+      let cfg = { ...defaults, ...JSON.parse(localStorage.getItem(cfgKey) || "{}") };
+      let client = null;
+
+      function status(text, cls = "") {
+        const box = document.getElementById("supabaseStatus");
+        if (!box) return;
+        box.textContent = text;
+        box.className = `notice ${cls}`.trim();
+      }
+
+      function configured() {
+        return Boolean(cfg.url && cfg.anonKey && cfg.table && cfg.rowId);
+      }
+
+      function getClient() {
+        if (!configured() || !window.supabase) return null;
+        if (!client) client = window.supabase.createClient(cfg.url, cfg.anonKey);
+        return client;
+      }
+
+      function readState() {
+        return JSON.parse(localStorage.getItem(dataKey) || "{}");
+      }
+
+      function fillForm() {
+        const fields = {
+          supabaseUrl: "url",
+          supabaseAnonKey: "anonKey",
+          supabaseTable: "table",
+          supabaseRowId: "rowId"
+        };
+        Object.entries(fields).forEach(([id, key]) => {
+          const input = document.getElementById(id);
+          if (input) input.value = cfg[key] || "";
+        });
+        status(configured() ? "Supabase configurado. Listo para sincronizar." : "Supabase no configurado. El sistema seguirá guardando en este navegador.", configured() ? "good" : "");
+      }
+
+      if (typeof saveState === "function") {
+        const saveLocalState = saveState;
+        saveState = function (...args) {
+          const result = saveLocalState.apply(this, args);
+          if (configured()) setTimeout(saveCloud, 0);
+          return result;
+        };
+      }
+
+      async function saveCloud() {
+        const db = getClient();
+        if (!db) return;
+        status("Guardando en Supabase...");
+        const { error } = await db
+          .from(cfg.table)
+          .upsert({ id: cfg.rowId, data: readState(), updated_at: new Date().toISOString() }, { onConflict: "id" });
+        status(error ? `No se pudo guardar en Supabase: ${error.message}` : `Guardado en Supabase: ${new Date().toLocaleTimeString("es-BO")}`, error ? "bad" : "good");
+      }
+
+      async function loadCloud() {
+        const db = getClient();
+        if (!db) return;
+        status("Cargando datos desde Supabase...");
+        const { data, error } = await db.from(cfg.table).select("data, updated_at").eq("id", cfg.rowId).maybeSingle();
+        if (error) {
+          status(`No se pudo cargar Supabase: ${error.message}`, "bad");
+          return;
+        }
+        if (!data?.data) {
+          await saveCloud();
+          return;
+        }
+        localStorage.setItem(dataKey, JSON.stringify(data.data));
+        try {
+          if (typeof normalizeState === "function" && typeof defaults !== "undefined") {
+            state = normalizeState({
+              ...structuredClone(defaults),
+              ...data.data,
+              config: { ...defaults.config, ...(data.data.config || {}) }
+            });
+            if (typeof renderAll === "function") renderAll();
+          }
+        } catch {}
+        status("Datos cargados desde Supabase.", "good");
+      }
+
+      document.getElementById("supabaseForm")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        cfg = {
+          url: document.getElementById("supabaseUrl").value.trim(),
+          anonKey: document.getElementById("supabaseAnonKey").value.trim(),
+          table: document.getElementById("supabaseTable").value.trim() || defaults.table,
+          rowId: document.getElementById("supabaseRowId").value.trim() || defaults.rowId
+        };
+        client = null;
+        localStorage.setItem(cfgKey, JSON.stringify(cfg));
+        fillForm();
+        await saveCloud();
+        alert("Conexión de Supabase guardada.");
+      });
+
+      document.getElementById("syncNowBtn")?.addEventListener("click", async () => {
+        if (!configured()) {
+          alert("Primero pegá la URL y la anon public key.");
+          return;
+        }
+        await loadCloud();
+        await saveCloud();
+      });
+
+      document.getElementById("clearSupabaseBtn")?.addEventListener("click", () => {
+        localStorage.removeItem(cfgKey);
+        cfg = { ...defaults };
+        client = null;
+        fillForm();
+      });
+
+      fillForm();
+    })();
+  </script>
 </body>
 </html>
